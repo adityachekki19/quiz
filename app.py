@@ -10,11 +10,12 @@ st.set_page_config(page_title="MCQ Dashboard", layout="wide")
 st.title("📊 MCQ Quiz Analytics Dashboard")
 
 # ===============================
-# LOAD DATA
+# LOAD DATA (SMART LOADING)
 # ===============================
 try:
     df = pd.read_csv("data.csv")
 
+    # If data is in single column → fix automatically
     if len(df.columns) == 1:
         df = df.iloc[:, 0].str.split(",", expand=True)
         df.columns = ["NAME","COLLEGE","DEPARTMENT","Q1","Q2","Q3","Q4","Q5"]
@@ -30,6 +31,9 @@ except Exception as e:
 # ===============================
 df.columns = df.columns.str.strip().str.upper()
 df.fillna("Not Answered", inplace=True)
+
+# Debug (optional)
+# st.write("Columns:", df.columns)
 
 # ===============================
 # FILTERS
@@ -58,11 +62,6 @@ if selected_dept != "All":
 if has_college and selected_college != "All":
     df = df[df["COLLEGE"] == selected_college]
 
-# 🚨 STOP if no data
-if df.empty:
-    st.error("❌ No data matches selected filters. Try different options.")
-    st.stop()
-
 # ===============================
 # ANSWER KEY
 # ===============================
@@ -78,22 +77,27 @@ answer_key = {
 # CALCULATE SCORE
 # ===============================
 def calculate_score(row):
-    return sum(row[q] == answer_key[q] for q in answer_key)
+    score = 0
+    for q in answer_key:
+        if row[q] == answer_key[q]:
+            score += 1
+    return score
 
 df["SCORE"] = df.apply(calculate_score, axis=1)
 
 # ===============================
-# RANK & RESULT
+# ADD RANK & RESULT
 # ===============================
 df["RANK"] = df["SCORE"].rank(ascending=False, method="dense")
 df["RESULT"] = df["SCORE"].apply(lambda x: "Pass" if x >= 3 else "Fail")
 
 # ===============================
-# STATS
+# OVERALL STATS
 # ===============================
 st.subheader("📌 Overall Statistics")
 
 col1, col2, col3, col4 = st.columns(4)
+
 col1.metric("Total Students", len(df))
 col2.metric("Average Score", round(df["SCORE"].mean(), 2))
 col3.metric("Highest Score", df["SCORE"].max())
@@ -106,17 +110,17 @@ st.markdown("---")
 # ===============================
 st.subheader("📊 Score Distribution")
 
-fig1, ax1 = plt.subplots()
-sns.histplot(df["SCORE"], bins=5, kde=True, ax=ax1)
+fig1 = plt.figure()
+sns.histplot(df["SCORE"], bins=5, kde=True)
 st.pyplot(fig1)
 
 # ===============================
-# PASS / FAIL
+# PASS VS FAIL
 # ===============================
 st.subheader("✅ Pass vs Fail")
 
-fig_pf, ax_pf = plt.subplots()
-sns.countplot(x="RESULT", data=df, ax=ax_pf)
+fig_pf = plt.figure()
+sns.countplot(x="RESULT", data=df)
 st.pyplot(fig_pf)
 
 # ===============================
@@ -126,13 +130,10 @@ st.subheader("🏢 Department Performance")
 
 dept_perf = df.groupby("DEPARTMENT")["SCORE"].mean()
 
-if not dept_perf.empty:
-    fig2, ax2 = plt.subplots()
-    dept_perf.plot(kind="bar", ax=ax2)
-    ax2.set_ylabel("Average Score")
-    st.pyplot(fig2)
-else:
-    st.warning("No department data to plot")
+fig2 = plt.figure()
+dept_perf.plot(kind="bar")
+plt.ylabel("Average Score")
+st.pyplot(fig2)
 
 # ===============================
 # COLLEGE PERFORMANCE
@@ -142,13 +143,10 @@ if has_college:
 
     college_perf = df.groupby("COLLEGE")["SCORE"].mean()
 
-    if not college_perf.empty:
-        fig3, ax3 = plt.subplots()
-        college_perf.plot(kind="bar", ax=ax3)
-        ax3.set_ylabel("Average Score")
-        st.pyplot(fig3)
-    else:
-        st.warning("No college data to plot")
+    fig3 = plt.figure()
+    college_perf.plot(kind="bar")
+    plt.ylabel("Average Score")
+    st.pyplot(fig3)
 
 # ===============================
 # QUESTION ANALYSIS
@@ -159,14 +157,14 @@ question_accuracy = {}
 
 for q in answer_key:
     correct = (df[q] == answer_key[q]).sum()
-    question_accuracy[q] = correct / len(df) if len(df) > 0 else 0
+    question_accuracy[q] = correct / len(df)
 
 question_df = pd.DataFrame.from_dict(
     question_accuracy, orient="index", columns=["Accuracy"]
 )
 
-fig4, ax4 = plt.subplots()
-question_df["Accuracy"].plot(kind="bar", ax=ax4)
+fig4 = plt.figure()
+question_df["Accuracy"].plot(kind="bar")
 st.pyplot(fig4)
 
 # ===============================
@@ -176,6 +174,7 @@ st.subheader("🧠 Insights")
 
 best_dept = dept_perf.idxmax()
 weak_dept = dept_perf.idxmin()
+
 best_q = question_df["Accuracy"].idxmax()
 worst_q = question_df["Accuracy"].idxmin()
 
